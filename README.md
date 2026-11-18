@@ -298,13 +298,34 @@ Building NetworkGuard helped me practice:
 - Setting up Continuous Integration with GitHub Actions.
 - Considering privacy and security in application design.
 
-## 👨‍💻 Author
 
+## 👨‍💻 Author & Acknowledgements
+
+### Project Developer
 **Quang Doan**
 
 Computer Studies and Information Systems (CSIS) Student  
 Douglas College, British Columbia, Canada
 
-Currently learning Python, networking, software development, and cybersecurity.
+GitHub: https://github.com/ronD2K
 
-**GitHub:** https://github.com/ronD2K
+### AI Development Assistant
+**ChatGPT (OpenAI)**
+
+ChatGPT assisted with:
+- Python programming guidance
+- Code development and debugging
+- Network scanning and monitoring concepts
+- Automated testing with Pytest
+- Streamlit dashboard development
+- GitHub Actions and documentation
+
+### Project Development
+
+NetworkGuard was developed as a hands-on learning
+project with AI-assisted guidance.
+
+The project involved implementing, testing,
+debugging, and improving a Python-based network
+monitoring application.
+
