@@ -1,23 +1,17 @@
 
 # NetworkGuard
 
-[![NetworkGuard Tests](https://github.com/ronnieD2K/NetworkGuard/actions/workflows/tests.yml/badge.svg)](https://github.com/ronnieD2K/NetworkGuard/actions/workflows/tests.yml)
+[![NetworkGuard Tests](https://github.com/ronD2K/NetworkGuard/actions/workflows/tests.yml/badge.svg)](https://github.com/ronD2K/NetworkGuard/actions/workflows/tests.yml)
 
-A Python-based home network monitoring project built
-to practice networking, cybersecurity, and software
-development fundamentals.
+A Python-based home network monitoring project built to practice networking, cybersecurity, and software development fundamentals.
 
 ## Overview
 
-NetworkGuard is a local network discovery and
-monitoring tool.
+NetworkGuard is a local network discovery and monitoring tool.
 
-It uses Nmap to discover active hosts, stores scan
-history, and compares scan results to identify
-newly detected IP addresses.
+It uses Nmap to discover active hosts, stores scan history, and compares scan results to identify newly detected IP addresses.
 
-A Streamlit dashboard provides a simple interface
-for monitoring devices and reviewing scan history.
+A Streamlit dashboard provides a simple interface for monitoring devices and reviewing scan history.
 
 ## Features
 
@@ -31,6 +25,7 @@ for monitoring devices and reviewing scan history.
 - Security alert history
 - CSV export
 - Automated unit tests using Pytest
+- Continuous Integration with GitHub Actions
 
 ## Technologies
 
@@ -41,6 +36,7 @@ for monitoring devices and reviewing scan history.
 - JSON
 - XML
 - Git and GitHub
+- GitHub Actions
 
 ## Project Structure
 
@@ -53,6 +49,9 @@ NetworkGuard/
 ├── dashboard.py
 ├── requirements.txt
 ├── .gitignore
+├── .github/
+│   └── workflows/
+│       └── tests.yml
 └── tests/
     ├── test_monitor.py
     ├── test_scanner.py
@@ -64,7 +63,7 @@ NetworkGuard/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/ronnieD2K/NetworkGuard.git
+git clone https://github.com/ronD2K/NetworkGuard.git
 cd NetworkGuard
 ```
 
@@ -76,17 +75,15 @@ python -m pip install -r requirements.txt
 
 ### 3. Install Nmap
 
-Install Nmap from:
+Download and install Nmap:
 
 https://nmap.org/download.html
 
-Ensure that the `nmap` command is available.
+Ensure that the `nmap` command is available from your terminal.
 
 ### 4. Configure the network
 
-Open `scanner.py` and configure `NETWORK`
-for a private network you own or are authorized
-to scan.
+Open `scanner.py` and configure the `NETWORK` variable for a private network you own or have permission to scan.
 
 ### 5. Launch the dashboard
 
@@ -96,36 +93,46 @@ python -m streamlit run dashboard.py
 
 ## Running Tests
 
+Run automated tests with:
+
 ```bash
 python -m pytest tests -v
 ```
 
-The project currently includes 12 automated
-tests covering scanning, monitoring, and history
-functionality.
+NetworkGuard includes 12 automated tests covering:
+
+- Network scanning and XML parsing
+- Device detection
+- Scan history management
+- Error handling
+- Mock network scans
+
+## Continuous Integration
+
+GitHub Actions automatically runs the test suite when code is pushed to the `main` branch or a pull request targets `main`.
+
+The CI workflow uses Python and Pytest to check that existing functionality continues to work.
 
 ## Limitations
 
 - Designed for local, authorized networks only.
 - Some devices may not respond to network discovery.
 - MAC addresses and vendors may be unavailable.
-- A newly detected IP does not necessarily
-  indicate a security threat.
-- A missing IP does not prove a device is offline.
-- Monitoring requires manual scans.
+- Newly detected IP addresses do not necessarily indicate security threats.
+- A missing IP does not prove that a device is offline.
+- Monitoring currently requires manual scans.
 
 ## Security and Privacy
 
 NetworkGuard is intended for educational use.
 
-Scan results and device information are stored
-locally and excluded from Git using .gitignore.
+Scan results and device information are stored locally and excluded from Git using `.gitignore`.
 
-Do not scan networks without authorization.
+Only scan networks you own or have explicit permission to test.
 
 ## Author
 
-Quang Doan
+**Quang Doan**
 
 CSIS Student at Douglas College
 
