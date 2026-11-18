@@ -1,0 +1,24 @@
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local network data
+devices.json
+scan_results.json
+scan_history.json
+*.csv
+
+# Credentials and local settings
+.env
+.env.*
+.streamlit/secrets.toml
+
+# IDE and operating system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
