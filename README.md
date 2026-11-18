@@ -1,6 +1,8 @@
 
 # NetworkGuard
 
+[![NetworkGuard Tests](https://github.com/ronnieD2K/NetworkGuard/actions/workflows/tests.yml/badge.svg)](https://github.com/ronnieD2K/NetworkGuard/actions/workflows/tests.yml)
+
 A Python-based home network monitoring project built
 to practice networking, cybersecurity, and software
 development fundamentals.
