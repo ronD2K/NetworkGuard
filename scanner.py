@@ -5,29 +5,66 @@ import ipaddress
 import xml.etree.ElementTree as ET
 
 
-# Read the network from the local environment.
-# No personal subnet is stored in public source code.
-NETWORK = os.getenv("NETWORKGUARD_SUBNET", "").strip()
+# Network configuration is stored locally.
+# Example environment variable:
+# NETWORKGUARD_SUBNET=192.168.1.0/24
+
+NETWORK = os.getenv(
+    "NETWORKGUARD_SUBNET", ""
+).strip()
+
+
+# RFC 1918 private IPv4 address ranges
+ALLOWED_NETWORKS = (
+    ipaddress.IPv4Network("10.0.0.0/8"),
+    ipaddress.IPv4Network("172.16.0.0/12"),
+    ipaddress.IPv4Network("192.168.0.0/16"),
+)
 
 
 def validate_network(network_text):
-    if not network_text:
+    """
+    Validate a network before scanning.
+
+    Rules:
+    - Configuration must not be empty.
+    - Only IPv4 is supported.
+    - Only RFC 1918 private ranges are allowed.
+    - Maximum scan size is a /24 subnet.
+    """
+
+    if not network_text or not network_text.strip():
         raise ValueError(
             "No network configured. Set NETWORKGUARD_SUBNET "
             "before using Live Mode."
         )
 
-    network = ipaddress.ip_network(
-        network_text,
-        strict=True
-    )
+    try:
+        network = ipaddress.ip_network(
+            network_text.strip(),
+            strict=True
+        )
 
-    if network.version != 4 or not network.is_private:
+    except ValueError as error:
+        raise ValueError(
+            "Invalid network configuration. "
+            "Use a valid CIDR subnet."
+        ) from error
+
+    if network.version != 4:
         raise ValueError(
             "Only private IPv4 networks are supported."
         )
 
-    # Prevent accidentally scanning very large ranges.
+    if not any(
+        network.subnet_of(allowed)
+        for allowed in ALLOWED_NETWORKS
+    ):
+        raise ValueError(
+            "Only RFC 1918 private IPv4 networks "
+            "are supported."
+        )
+
     if network.prefixlen < 24:
         raise ValueError(
             "Network range is too large. "
@@ -38,13 +75,24 @@ def validate_network(network_text):
 
 
 def parse_nmap_xml(xml_output):
+    """
+    Parse Nmap XML output and return
+    a list of active IPv4 devices.
+    """
+
     root = ET.fromstring(xml_output)
+
     devices = []
+    seen_ips = set()
 
     for host in root.findall("host"):
+
         status = host.find("status")
 
-        if status is None or status.get("state") != "up":
+        if status is None:
+            continue
+
+        if status.get("state") != "up":
             continue
 
         device = {
@@ -55,35 +103,61 @@ def parse_nmap_xml(xml_output):
         }
 
         for address in host.findall("address"):
+
             address_type = address.get("addrtype")
+            address_value = address.get("addr")
 
             if address_type == "ipv4":
-                device["ip"] = address.get("addr")
+                if not address_value:
+                    continue
+
+                try:
+                    valid_ip = ipaddress.IPv4Address(
+                        address_value
+                    )
+
+                except ipaddress.AddressValueError:
+                    continue
+
+                device["ip"] = str(valid_ip)
 
             elif address_type == "mac":
-                device["mac"] = address.get("addr")
+
+                if address_value:
+                    device["mac"] = address_value
+
                 device["vendor"] = (
                     address.get("vendor") or "Unknown"
                 )
 
-        if device["ip"]:
+        ip = device["ip"]
+
+        if ip and ip not in seen_ips:
             devices.append(device)
+            seen_ips.add(ip)
 
     return devices
 
 
 def scan_network():
+    """
+    Discover active hosts on the
+    configured authorized local network.
+    """
+
     network = validate_network(NETWORK)
+
+    command = [
+        "nmap",
+        "-sn",
+        "-oX",
+        "-",
+        str(network)
+    ]
 
     try:
         result = subprocess.run(
-            [
-                "nmap",
-                "-sn",
-                "-oX",
-                "-",
-                str(network)
-            ],
+            command,
             capture_output=True,
             text=True,
             check=True,
@@ -97,18 +171,27 @@ def scan_network():
 
     except FileNotFoundError as error:
         raise RuntimeError(
-            "Nmap was not found. Check installation."
+            "Nmap was not found. "
+            "Check that Nmap is installed and on PATH."
         ) from error
 
     except subprocess.CalledProcessError as error:
+        details = (
+            error.stderr or "Unknown Nmap error"
+        ).strip()
+
         raise RuntimeError(
-            f"Nmap failed: {error.stderr}"
+            f"Nmap scan failed: {details}"
         ) from error
 
     try:
-        return parse_nmap_xml(result.stdout)
+        devices = parse_nmap_xml(
+            result.stdout
+        )
 
     except ET.ParseError as error:
         raise RuntimeError(
             "Nmap returned invalid XML data."
         ) from error
+
+    return devices

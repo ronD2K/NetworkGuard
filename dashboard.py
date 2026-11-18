@@ -297,7 +297,15 @@ def show_analytics_chart(history):
 
     # Native Streamlit support for SVG.
     # No Pandas or deprecated HTML component.
-    st.image(svg, width="stretch")
+    
+    assert svg.strip().startswith("<svg"), "Invalid SVG start"
+
+    st.image(
+        svg.strip(),
+        width="stretch"
+    )
+
+
 
     st.caption(
         "Network discovery history. "
