@@ -1,11 +1,40 @@
 
+import os
 import subprocess
 import ipaddress
 import xml.etree.ElementTree as ET
 
 
-# Scan only your authorized local network
-NETWORK = "10.0.0.0/24"
+# Read the network from the local environment.
+# No personal subnet is stored in public source code.
+NETWORK = os.getenv("NETWORKGUARD_SUBNET", "").strip()
+
+
+def validate_network(network_text):
+    if not network_text:
+        raise ValueError(
+            "No network configured. Set NETWORKGUARD_SUBNET "
+            "before using Live Mode."
+        )
+
+    network = ipaddress.ip_network(
+        network_text,
+        strict=True
+    )
+
+    if network.version != 4 or not network.is_private:
+        raise ValueError(
+            "Only private IPv4 networks are supported."
+        )
+
+    # Prevent accidentally scanning very large ranges.
+    if network.prefixlen < 24:
+        raise ValueError(
+            "Network range is too large. "
+            "Use a /24 or smaller subnet."
+        )
+
+    return network
 
 
 def parse_nmap_xml(xml_output):
@@ -15,10 +44,7 @@ def parse_nmap_xml(xml_output):
     for host in root.findall("host"):
         status = host.find("status")
 
-        if status is None:
-            continue
-
-        if status.get("state") != "up":
+        if status is None or status.get("state") != "up":
             continue
 
         device = {
@@ -47,18 +73,7 @@ def parse_nmap_xml(xml_output):
 
 
 def scan_network():
-    print("\nScanning network...")
-
-    # Validate the configured network
-    network = ipaddress.ip_network(
-        NETWORK,
-        strict=True
-    )
-
-    if not network.is_private:
-        raise ValueError(
-            "NetworkGuard only permits private network ranges."
-        )
+    network = validate_network(NETWORK)
 
     try:
         result = subprocess.run(
@@ -91,11 +106,9 @@ def scan_network():
         ) from error
 
     try:
-        devices = parse_nmap_xml(result.stdout)
+        return parse_nmap_xml(result.stdout)
 
     except ET.ParseError as error:
         raise RuntimeError(
             "Nmap returned invalid XML data."
         ) from error
-
-    return devices

@@ -1,26 +1,22 @@
 
-import json
 import csv
-import io
 import html
+import io
+import json
 from pathlib import Path
-from datetime import datetime
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-from scanner import scan_network, NETWORK
+from scanner import NETWORK, scan_network
 from monitor import (
     load_previous_scan,
     save_scan,
     detect_new_devices
 )
 from history import save_history
+from demo_data import get_demo_data
 
-
-# ==========================================
-# 1. CONFIGURATION
-# ==========================================
 
 BASE_DIR = Path(__file__).resolve().parent
 HISTORY_FILE = BASE_DIR / "scan_history.json"
@@ -33,7 +29,7 @@ st.set_page_config(
 
 
 # ==========================================
-# 2. LOAD DATA
+# DATA AND HELPER FUNCTIONS
 # ==========================================
 
 def load_history():
@@ -41,70 +37,49 @@ def load_history():
         return []
 
     try:
-        with HISTORY_FILE.open("r", encoding="utf-8") as file:
+        with HISTORY_FILE.open(
+            "r", encoding="utf-8"
+        ) as file:
             data = json.load(file)
 
-        if isinstance(data, list):
-            return [
-                record for record in data
-                if isinstance(record, dict)
-            ]
+        return data if isinstance(data, list) else []
 
     except (OSError, json.JSONDecodeError):
         st.warning("Unable to load scan history.")
-
-    return []
-
-
-def get_latest_devices():
-    try:
-        return load_previous_scan() or []
-    except (OSError, json.JSONDecodeError):
         return []
 
 
-# ==========================================
-# 3. DEVICE MONITORING
-# ==========================================
+def get_live_devices():
+    return load_previous_scan() or []
+
 
 def compare_scans(history):
     if len(history) < 2:
         return [], []
 
-    previous = history[-2].get("devices", [])
-    current = history[-1].get("devices", [])
-
-    if not isinstance(previous, list):
-        previous = []
-
-    if not isinstance(current, list):
-        current = []
+    previous = history[-2].get("devices") or []
+    current = history[-1].get("devices") or []
 
     previous_ips = {
-        device.get("ip")
-        for device in previous
-        if isinstance(device, dict) and device.get("ip")
+        item.get("ip")
+        for item in previous
+        if isinstance(item, dict) and item.get("ip")
     }
 
     current_ips = {
-        device.get("ip")
-        for device in current
-        if isinstance(device, dict) and device.get("ip")
+        item.get("ip")
+        for item in current
+        if isinstance(item, dict) and item.get("ip")
     }
 
-    appeared = sorted(current_ips - previous_ips)
-    missing = sorted(previous_ips - current_ips)
+    return (
+        sorted(current_ips - previous_ips),
+        sorted(previous_ips - current_ips)
+    )
 
-    return appeared, missing
-
-
-# ==========================================
-# 4. CSV EXPORT
-# ==========================================
 
 def make_csv(rows, columns):
     output = io.StringIO()
-
     writer = csv.writer(output)
     writer.writerow(columns)
 
@@ -115,12 +90,6 @@ def make_csv(rows, columns):
         ])
 
     return output.getvalue().encode("utf-8-sig")
-
-
-def export_devices(devices):
-    columns = ["ip", "mac", "vendor", "status"]
-
-    return make_csv(devices, columns)
 
 
 def export_history(history):
@@ -142,7 +111,7 @@ def export_history(history):
 
 
 # ==========================================
-# 5. ANALYTICS CHART
+# ANALYTICS CHART - NO PANDAS
 # ==========================================
 
 def show_analytics_chart(history):
@@ -176,18 +145,19 @@ def show_analytics_chart(history):
     plot_height = height - top - bottom
 
     upper = max(max(values) + 2, 5)
-    count = len(values)
-
     points = []
 
     for i, value in enumerate(values):
-        if count == 1:
+        if len(values) == 1:
             x = left + plot_width / 2
         else:
-            x = left + i * plot_width / (count - 1)
+            x = left + (
+                i * plot_width / (len(values) - 1)
+            )
 
-        y = top + plot_height * (1 - value / upper)
-
+        y = top + plot_height * (
+            1 - value / upper
+        )
         points.append((x, y))
 
     coordinates = " ".join(
@@ -271,13 +241,12 @@ def show_analytics_chart(history):
     )
 
     st.caption(
-        f"Latest {count} scans. "
-        "Hover over a point to see the scan time."
+        "Hover over chart points for scan details."
     )
 
 
 # ==========================================
-# 6. DEVICE INVENTORY
+# DEVICE INVENTORY
 # ==========================================
 
 def show_device_inventory(devices):
@@ -285,7 +254,7 @@ def show_device_inventory(devices):
 
     search = st.text_input(
         "Search Devices",
-        placeholder="Enter IP, MAC or Vendor..."
+        placeholder="Search IP, MAC, or vendor..."
     ).strip().lower()
 
     col1, col2 = st.columns(2)
@@ -318,15 +287,17 @@ def show_device_inventory(devices):
 
         matches_status = (
             status_filter == "All"
-            or device.get("status", "").lower()
-            == status_filter.lower()
+            or str(
+                device.get("status") or ""
+            ).lower() == status_filter.lower()
         )
 
         if matches_search and matches_status:
             filtered.append(device)
 
     st.caption(
-        f"Showing {len(filtered)} of {len(devices)} devices"
+        f"Showing {len(filtered)} of "
+        f"{len(devices)} devices"
     )
 
     if not filtered:
@@ -337,7 +308,12 @@ def show_device_inventory(devices):
 
     for col, title in zip(
         headers,
-        ["IP Address", "MAC Address", "Vendor", "Status"]
+        [
+            "IP Address",
+            "MAC Address",
+            "Vendor",
+            "Status"
+        ]
     ):
         col.write(f"**{title}**")
 
@@ -346,20 +322,25 @@ def show_device_inventory(devices):
     for device in filtered:
         cols = st.columns([2, 3, 3, 2])
 
-        cols[0].text(device.get("ip") or "N/A")
-        cols[1].text(device.get("mac") or "N/A")
-        cols[2].text(device.get("vendor") or "Unknown")
-        cols[3].text(device.get("status") or "Unknown")
+        cols[0].text(
+            device.get("ip") or "N/A"
+        )
+        cols[1].text(
+            device.get("mac") or "N/A"
+        )
+        cols[2].text(
+            device.get("vendor") or "Unknown"
+        )
+        cols[3].text(
+            device.get("status") or "Unknown"
+        )
 
     st.divider()
-
     st.subheader("Device Details")
-
-    options = list(range(len(filtered)))
 
     selected = st.selectbox(
         "Select a device",
-        options,
+        range(len(filtered)),
         format_func=lambda i: (
             f"{filtered[i].get('ip', 'Unknown')} - "
             f"{filtered[i].get('vendor', 'Unknown')}"
@@ -368,14 +349,22 @@ def show_device_inventory(devices):
 
     device = filtered[selected]
 
-    st.write(f"**IP Address:** {device.get('ip') or 'N/A'}")
-    st.write(f"**MAC Address:** {device.get('mac') or 'N/A'}")
-    st.write(f"**Vendor:** {device.get('vendor') or 'Unknown'}")
-    st.write(f"**Status:** {device.get('status') or 'Unknown'}")
+    st.write(
+        f"**IP Address:** {device.get('ip') or 'N/A'}"
+    )
+    st.write(
+        f"**MAC Address:** {device.get('mac') or 'N/A'}"
+    )
+    st.write(
+        f"**Vendor:** {device.get('vendor') or 'Unknown'}"
+    )
+    st.write(
+        f"**Status:** {device.get('status') or 'Unknown'}"
+    )
 
 
 # ==========================================
-# 7. SCAN HISTORY
+# SCAN HISTORY AND ALERTS
 # ==========================================
 
 def show_scan_history(history):
@@ -386,24 +375,30 @@ def show_scan_history(history):
         return
 
     for record in reversed(history[-20:]):
-        timestamp = record.get("timestamp", "Unknown")
-        total = record.get("total_devices", 0)
-        new_devices = record.get("new_devices") or []
+        timestamp = record.get(
+            "timestamp", "Unknown"
+        )
+
+        total = record.get(
+            "total_devices", 0
+        )
 
         with st.expander(
             f"{timestamp} | {total} hosts"
         ):
-            st.write(f"**Hosts Detected:** {total}")
-            st.write(f"**New IPs:** {len(new_devices)}")
+            st.write(
+                f"**Hosts Detected:** {total}"
+            )
+            st.write(
+                "**New IPs:** "
+                f"{len(record.get('new_devices') or [])}"
+            )
 
-            for device in record.get("devices", []):
-                if isinstance(device, dict):
-                    st.text(device.get("ip") or "N/A")
+            for device in record.get("devices") or []:
+                st.text(
+                    device.get("ip") or "N/A"
+                )
 
-
-# ==========================================
-# 8. SECURITY ALERT HISTORY
-# ==========================================
 
 def show_alert_history(history):
     st.subheader("Security Alert History")
@@ -411,15 +406,20 @@ def show_alert_history(history):
     alerts = []
 
     for record in history:
-        timestamp = record.get("timestamp", "Unknown")
-
-        for device in record.get("new_devices") or []:
-            if isinstance(device, dict):
-                alerts.append({
-                    "time": timestamp,
-                    "ip": device.get("ip") or "Unknown",
-                    "mac": device.get("mac") or "N/A"
-                })
+        for device in record.get(
+            "new_devices"
+        ) or []:
+            alerts.append({
+                "time": record.get(
+                    "timestamp", "Unknown"
+                ),
+                "ip": device.get(
+                    "ip", "Unknown"
+                ),
+                "mac": device.get(
+                    "mac"
+                ) or "N/A"
+            })
 
     if not alerts:
         st.info("No new-IP alerts recorded.")
@@ -433,79 +433,128 @@ def show_alert_history(history):
         with st.expander(
             f"{alert['ip']} | {alert['time']}"
         ):
-            st.write(f"**IP:** {alert['ip']}")
-            st.write(f"**MAC:** {alert['mac']}")
-            st.write(f"**Time:** {alert['time']}")
+            st.write(
+                f"**IP:** {alert['ip']}"
+            )
+            st.write(
+                f"**MAC:** {alert['mac']}"
+            )
+            st.write(
+                f"**Time:** {alert['time']}"
+            )
 
     st.caption(
         "New IP detection does not automatically "
-        "mean a security threat."
+        "indicate a security threat."
     )
 
 
 # ==========================================
-# 9. DASHBOARD HEADER
+# DASHBOARD AND MODE SELECTION
 # ==========================================
 
 st.title("🛡️ NetworkGuard")
 st.write("Home Network Security Monitor")
-st.caption("Version 2.2 | Python + Nmap + Streamlit")
-st.caption(f"Authorized scan target: {NETWORK}")
+st.caption("Version 2.6 | Python + Nmap + Streamlit")
 
-st.divider()
+mode = st.sidebar.radio(
+    "Operating Mode",
+    ["Demo Mode", "Live Mode"],
+    index=0
+)
 
+st.sidebar.divider()
 
-# ==========================================
-# 10. NETWORK SCANNER
-# ==========================================
+if mode == "Demo Mode":
+    st.sidebar.success("Demo Mode Active")
+    st.info(
+        "DEMO MODE — All displayed network data "
+        "is simulated. No Nmap scan is performed."
+    )
 
-st.subheader("Network Scanner")
+    devices, history = get_demo_data()
 
-if st.button("🔍 Scan Network", type="primary"):
-    with st.spinner("Scanning network..."):
-        try:
-            devices = scan_network()
-            previous = load_previous_scan()
+else:
+    st.sidebar.warning("Live Mode Active")
 
-            if previous is None:
-                new_devices = []
-            else:
-                new_devices = detect_new_devices(
-                    devices, previous
+    if NETWORK:
+        st.sidebar.caption(
+            f"Configured subnet: {NETWORK}"
+        )
+    else:
+        st.sidebar.error(
+            "NETWORKGUARD_SUBNET is not configured."
+        )
+
+    st.subheader("Network Scanner")
+
+    authorized = st.checkbox(
+        "I own or have explicit permission to "
+        "scan the configured network."
+    )
+
+    if st.button(
+        "🔍 Scan Network",
+        type="primary",
+        disabled=not authorized or not NETWORK
+    ):
+        with st.spinner("Scanning network..."):
+            try:
+                scanned = scan_network()
+                previous = load_previous_scan()
+
+                if previous is None:
+                    new_devices = []
+                else:
+                    new_devices = detect_new_devices(
+                        scanned, previous
+                    )
+
+                save_history(
+                    scanned, new_devices
+                )
+                save_scan(scanned)
+
+            except (
+                ValueError,
+                RuntimeError,
+                OSError
+            ) as error:
+                st.error(
+                    f"Network scan failed: {error}"
                 )
 
-            # Save history before updating latest scan
-            save_history(devices, new_devices)
-            save_scan(devices)
-
-        except Exception as error:
-            st.error(f"Network scan failed: {error}")
-
-        else:
-            st.success("Network scan completed!")
-
-            if previous is None:
-                st.info("First scan saved as baseline.")
-
-            elif new_devices:
-                st.warning(
-                    f"{len(new_devices)} new device/IP "
-                    "record(s) detected!"
+            else:
+                st.success(
+                    "Network scan completed!"
                 )
 
-                for device in new_devices:
-                    st.write(f"New IP: {device['ip']}")
+                if previous is None:
+                    st.info(
+                        "First scan saved as baseline."
+                    )
+                elif new_devices:
+                    st.warning(
+                        f"{len(new_devices)} new "
+                        "device/IP record(s) detected!"
+                    )
 
-            else:
-                st.success("No new device/IP records detected.")
+                    for device in new_devices:
+                        st.write(
+                            f"New IP: {device['ip']}"
+                        )
+                else:
+                    st.success(
+                        "No new device/IP records detected."
+                    )
+
+    devices = get_live_devices()
+    history = load_history()
 
 
 # ==========================================
-# 11. LOAD LATEST DATA
+# OVERVIEW
 # ==========================================
-
-devices = get_latest_devices()
-history = load_history()
 
 appeared, missing = compare_scans(history)
 
@@ -514,24 +563,28 @@ total_alerts = sum(
     for record in history
 )
 
-
-# ==========================================
-# 12. OVERVIEW
-# ==========================================
-
 st.divider()
 st.subheader("Overview")
 
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("Hosts Detected", len(devices))
-col2.metric("Total Scans", len(history))
-col3.metric("Historical Alerts", total_alerts)
-col4.metric("New IPs (Last Comparison)", len(appeared))
+col1.metric(
+    "Hosts Detected", len(devices)
+)
+col2.metric(
+    "Total Scans", len(history)
+)
+col3.metric(
+    "Historical Alerts", total_alerts
+)
+col4.metric(
+    "New IPs (Last Comparison)",
+    len(appeared)
+)
 
 
 # ==========================================
-# 13. MAIN DASHBOARD TABS
+# DASHBOARD TABS
 # ==========================================
 
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -541,8 +594,6 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "Device Monitoring"
 ])
 
-
-# TAB 1
 with tab1:
     show_device_inventory(devices)
 
@@ -550,34 +601,38 @@ with tab1:
 
     st.download_button(
         "⬇️ Export Devices CSV",
-        data=export_devices(devices),
-        file_name="networkguard_devices.csv",
+        data=make_csv(
+            devices,
+            ["ip", "mac", "vendor", "status"]
+        ),
+        file_name=(
+            "networkguard_demo_devices.csv"
+            if mode == "Demo Mode"
+            else "networkguard_devices.csv"
+        ),
         mime="text/csv"
     )
 
-
-# TAB 2
 with tab2:
     show_analytics_chart(history)
 
     st.divider()
-
     show_scan_history(history)
 
     st.download_button(
         "⬇️ Export Scan History CSV",
         data=export_history(history),
-        file_name="networkguard_history.csv",
+        file_name=(
+            "networkguard_demo_history.csv"
+            if mode == "Demo Mode"
+            else "networkguard_history.csv"
+        ),
         mime="text/csv"
     )
 
-
-# TAB 3
 with tab3:
     show_alert_history(history)
 
-
-# TAB 4
 with tab4:
     st.subheader("Device Monitoring")
 
@@ -586,23 +641,36 @@ with tab4:
             "At least two scans are required "
             "for comparison."
         )
+
     else:
         col1, col2 = st.columns(2)
 
-        col1.metric("Newly Detected IPs", len(appeared))
-        col2.metric("Not Detected This Scan", len(missing))
+        col1.metric(
+            "Newly Detected IPs",
+            len(appeared)
+        )
+        col2.metric(
+            "Not Detected This Scan",
+            len(missing)
+        )
 
         st.divider()
 
-        st.write("### Newly Detected IP Addresses")
+        st.subheader(
+            "Newly Detected IP Addresses"
+        )
 
         if appeared:
             for ip in appeared:
                 st.write(f"🟢 {ip}")
         else:
-            st.info("No newly detected IP addresses.")
+            st.info(
+                "No newly detected IP addresses."
+            )
 
-        st.write("### IPs Not Detected in Latest Scan")
+        st.subheader(
+            "IPs Not Detected in Latest Scan"
+        )
 
         if missing:
             for ip in missing:
@@ -611,19 +679,19 @@ with tab4:
             st.info("No missing IP addresses.")
 
         st.caption(
-            "Comparison uses IP addresses from the "
-            "two latest scans. A missing IP does not "
-            "prove the device is offline. DHCP changes "
-            "and discovery failures may affect results."
+            "IP comparison does not prove device "
+            "identity or availability. DHCP changes "
+            "and discovery failures affect results."
         )
 
 
 # ==========================================
-# 14. FOOTER
+# FOOTER
 # ==========================================
 
 st.divider()
 
 st.caption(
-    "NetworkGuard v2.2 | Local Network Monitoring Project"
+    f"NetworkGuard v2.6 | {mode} | "
+    "Local Network Monitoring Project"
 )
